@@ -23,7 +23,9 @@ struct Light {
 };
 
 struct Material {
-    Material(const float r, const Vec4f &a, const Vec3f &color, const float spec) : refractive_index(r), albedo(a), diffuse_color(color), specular_exponent(spec) {}
+    float (*displacement)(Vec3f&);
+
+    Material(const float r, const Vec4f &a, const Vec3f &color, const float spec, float (*d)(Vec3f&)) : refractive_index(r), albedo(a), diffuse_color(color), specular_exponent(spec), displacement(d) {}
     Material() : refractive_index(1), albedo(1,0,0,0), diffuse_color(), specular_exponent() {}
     float refractive_index;
     Vec4f albedo;
@@ -50,11 +52,6 @@ struct Sphere {
         if (t0 < 0) return false;
         return true;
     }
-
-    float displacement(const Vec3f &p){
-        Vec3f s = Vec3f(p).normalize(radius);
-        return sin(16*s.x)*sin(16*s.y)*sin(16*s.z)*0.01;
-    }
 };
 
 Vec3f reflect(const Vec3f &I, const Vec3f &N) {
@@ -70,7 +67,8 @@ Vec3f refract(const Vec3f &I, const Vec3f &N, const float eta_t, const float eta
 }
 
 float signed_distance(const Vec3f &p, Sphere sphere) { // this function defines the implicit surface we render
-    return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z) - (sphere.radius + sphere.displacement(p));
+    Vec3f s = Vec3f(p).normalize(sphere.radius);
+    return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z) - (sphere.radius + sphere.material.displacement(s));
 }
 
 Vec3f distance_field_normal(const Vec3f &pos, Sphere s) { // simple finite differences, very sensitive to the choice of the eps constant
@@ -93,18 +91,6 @@ bool scene_intersect(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphe
             material = spheres[i].material;
         }
     }
-    /*
-    float checkerboard_dist = std::numeric_limits<float>::max();
-    if (fabs(dir.y)>1e-3)  {
-        float d = -(orig.y+8)/dir.y; // the checkerboard plane has equation y = -4
-        Vec3f pt = orig + dir*d;
-        if (d>0 && fabs(pt.x)<30 && pt.z>10 && pt.z<30 && d<spheres_dist) {
-            checkerboard_dist = d;
-            hit = pt;
-            N = Vec3f(0,1,0);
-            material.diffuse_color = Vec3f(.3, .3, .3);
-        }
-    }*/
 
     float checkerboard_dist = std::numeric_limits<float>::max();
     if(fabs(dir.y)>1e-3){
@@ -189,6 +175,18 @@ void render(const std::vector<Sphere> &spheres, const std::vector<Light> &lights
     stbi_write_jpg("out.jpg", width, height, 3, pixmap.data(), 100);
 }
 
+float displacementSnow(Vec3f &s){
+    return sin(16*s.x)*sin(16*s.y)*sin(16*s.z)*0.005;
+}
+
+float displacementEye(Vec3f &s){
+    return sin(16*s.x)*sin(16*s.y)*sin(16*s.z)*0.005;
+}
+
+float displacementCarrot(Vec3f &s){
+    return Vec2f(sin(75.0), cos(75.0)) * Vec2f(Vec2f(s.x,s.y).norm() , s.z);
+}
+
 int main() {
     int n = -1;
     unsigned char *pixmap = stbi_load("../snow.jpg", &envmap_width, &envmap_height, &n, 0);
@@ -204,23 +202,24 @@ int main() {
     }
     stbi_image_free(pixmap);
 
-/*
-    Material      ivory(1.0, Vec4f(0.6,  0.3, 0.1, 0.0), Vec3f(0.4, 0.4, 0.3),   50.);
-    Material      glass(1.5, Vec4f(0.0,  0.5, 0.1, 0.8), Vec3f(0.6, 0.7, 0.8),  125.);
-    Material red_rubber(1.0, Vec4f(0.9,  0.1, 0.0, 0.0), Vec3f(0.3, 0.1, 0.1),   10.);
-    Material     mirror(1.0, Vec4f(0.0, 10.0, 0.8, 0.0), Vec3f(1.0, 1.0, 1.0), 1425.);
-*/
-
-    Material     snow(1.0, Vec4f(0.9, 0.1, 0.0, 0.0), Vec3f(1.0, 1.0, 1.0), 10.);
+    Material      carrot(1.0, Vec4f(0.6,  0.3, 0.1, 0.0), Vec3f(1.0, 127.0/255.0, 0.01), 50., displacementCarrot);
+    Material     snow(1.0, Vec4f(0.9, 0.1, 0.0, 0.0), Vec3f(1.0, 1.0, 1.0), 10., displacementSnow);
+    Material     eye(1.0, Vec4f(0.9, 0.1, 0.0, 0.0), Vec3f(0.0, 0.0, 0.0), 10., displacementEye);
 
     std::vector<Sphere> spheres;
     spheres.push_back(Sphere(Vec3f(-1, -5, 12), 2, snow));
-    spheres.push_back(Sphere(Vec3f(-1, -3.5, 12), 1.8, snow));
+    spheres.push_back(Sphere(Vec3f(-1, -4, 12), 1.8, snow));
+    spheres.push_back(Sphere(Vec3f(-1, -3, 12), 1.6, snow));
     spheres.push_back(Sphere(Vec3f(-1, -1, 12), 1, snow));
+
+    spheres.push_back(Sphere(Vec3f(-1, -0.7, 11), 0.165, carrot));
+
+    spheres.push_back(Sphere(Vec3f(-1.40, -0.41, 11.3), 0.115, eye));
+    spheres.push_back(Sphere(Vec3f(-0.6, -0.41, 11.3), 0.115, eye));
 
     std::vector<Light>  lights;
     lights.push_back(Light(Vec3f(50, 60, -120), 0.5));
-    lights.push_back(Light(Vec3f(0, 180, -120), 0.5));
+    lights.push_back(Light(Vec3f(0, 240, -120), 0.5));
     lights.push_back(Light(Vec3f(-50, 60, -120), 0.5));
 
     render(spheres, lights);
