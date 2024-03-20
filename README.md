@@ -1,5 +1,7 @@
 # snowman3d
 
+Louis LESNIAK et Théo JOFFROY
+
 ## Compilation
 
 ```
@@ -10,3 +12,10 @@ cd build &&
 cmake .. &&
 make
 ```
+## Exécution
+```
+./snowman3d
+```
+
+Output : *out.ppm*
+
