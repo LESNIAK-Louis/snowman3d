@@ -3,6 +3,7 @@
 Louis LESNIAK et Théo JOFFROY
 
 Rendu obtenu en utilisant la technique du Raymarching.
+
 Fonctions de distance : https://iquilezles.org/articles/distfunctions/
 
 ## Compilation
